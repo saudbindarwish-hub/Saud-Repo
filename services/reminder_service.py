@@ -15,14 +15,14 @@ def _build_cron_trigger(remind_at: datetime, rule: str):
     hour = remind_at.hour
     minute = remind_at.minute
     if rule == "daily":
-        return CronTrigger(hour=hour, minute=minute, timezone="UTC")
+        return CronTrigger(hour=hour, minute=minute, timezone="UTC", start_date=remind_at)
     if rule == "weekdays":
-        return CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="UTC")
+        return CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="UTC", start_date=remind_at)
     if rule == "weekly":
         dow = _DOW_NAMES[remind_at.weekday()]
-        return CronTrigger(day_of_week=dow, hour=hour, minute=minute, timezone="UTC")
+        return CronTrigger(day_of_week=dow, hour=hour, minute=minute, timezone="UTC", start_date=remind_at)
     if rule == "monthly":
-        return CronTrigger(day=remind_at.day, hour=hour, minute=minute, timezone="UTC")
+        return CronTrigger(day=remind_at.day, hour=hour, minute=minute, timezone="UTC", start_date=remind_at)
     return None
 
 
@@ -77,7 +77,6 @@ def schedule_reminder(
             id=job_id,
             replace_existing=True,
             misfire_grace_time=300,
-            start_date=remind_at,
         )
     else:
         scheduler.add_job(

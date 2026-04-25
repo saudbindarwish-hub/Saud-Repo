@@ -26,10 +26,18 @@ Today's Whoop recovery:
 When the user's message implies an action (add task, set reminder, etc.), respond with a JSON block \
 on its own line in this format, followed by a friendly reply:
 <action>
-{{"intent": "add_reminder", "data": {{"message": "...", "remind_at": "YYYY-MM-DDTHH:MM:SS"}}, "reply": "..."}}
+{{"intent": "add_reminder", "data": {{"message": "...", "remind_at": "YYYY-MM-DDTHH:MM:SS", "recurrence_rule": "daily"}}, "reply": "..."}}
 </action>
 
 Valid intents: add_task, add_reminder, none
+
+For add_reminder:
+- "remind_at": ISO8601 datetime (UTC) for the first occurrence
+- "recurrence_rule": omit or null for one-off; use "daily", "weekdays", "weekly", or "monthly" for recurring reminders
+
+For add_task:
+- "title": task title
+- "recurrence_rule": omit or null for one-off; use "daily", "weekdays", "weekly", or "monthly" for recurring tasks
 
 If no action is needed, omit the <action> block entirely. \
 Always ask at most ONE clarifying question if something is ambiguous."""

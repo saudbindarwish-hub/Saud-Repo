@@ -50,16 +50,20 @@ async def _dispatch_action(action: dict, update: Update, context: ContextTypes.D
     if intent == "add_reminder":
         message = data.get("message", "Reminder")
         remind_at_str = data.get("remind_at", "")
+        recurrence_rule = data.get("recurrence_rule") or None
         try:
             remind_at = datetime.fromisoformat(remind_at_str).replace(tzinfo=timezone.utc)
-            reminder_service.schedule_reminder(context.bot, user_id, chat_id, message, remind_at)
+            reminder_service.schedule_reminder(
+                context.bot, user_id, chat_id, message, remind_at, recurrence_rule=recurrence_rule
+            )
         except Exception:
             logger.error("Failed to dispatch add_reminder action", extra={"user_id": user_id})
     elif intent == "add_task":
         title = data.get("title", "")
+        recurrence_rule = data.get("recurrence_rule") or None
         if title:
             try:
-                task_service.add_task(user_id, title)
+                task_service.add_task(user_id, title, recurrence_rule=recurrence_rule)
             except Exception:
                 logger.error("Failed to dispatch add_task action", extra={"user_id": user_id})
 
