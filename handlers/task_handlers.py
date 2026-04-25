@@ -165,4 +165,5 @@ def get_task_conversation_handler() -> ConversationHandler:
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
         per_user=True,
         per_chat=True,
+        per_message=False,
     )
