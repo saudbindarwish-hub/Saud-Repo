@@ -9,4 +9,5 @@ class Reminder(BaseModel):
     message: str
     remind_at: str  # ISO8601 UTC datetime string
     is_fired: int = 0
+    recurrence_rule: Optional[str] = None
     created_at: Optional[str] = None

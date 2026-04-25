@@ -3,12 +3,19 @@ from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, Mess
 from handlers.auth import is_authorized
 from services import task_service
 from utils.formatters import format_task_list
-from keyboards.task_keyboards import priority_keyboard, task_action_keyboard
+from keyboards.task_keyboards import priority_keyboard, task_action_keyboard, recurrence_keyboard
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-STATE_TITLE, STATE_PRIORITY, STATE_DUE = range(3)
+STATE_TITLE, STATE_PRIORITY, STATE_DUE, STATE_RECURRENCE = range(4)
+
+_RECURRENCE_LABELS = {
+    "daily": "Daily",
+    "weekdays": "Weekdays (Mon–Fri)",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+}
 
 
 async def addtask_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
@@ -57,7 +64,6 @@ async def task_priority_callback(update: Update, context: ContextTypes.DEFAULT_T
     task_id = context.user_data.pop("pending_task_id", None)
     if task_id:
         from db.repositories import task_repo
-        from utils.validators import validate_priority
         task_repo.update_task_priority(task_id, update.effective_user.id, priority)
     await query.edit_message_text("Priority set!")
     return ConversationHandler.END
@@ -65,18 +71,30 @@ async def task_priority_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 async def task_due_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip()
-    due_date = None
-    if text != "/skip":
-        due_date = text
+    context.user_data["task_due"] = None if text == "/skip" else text
+    await update.message.reply_text("How often should this repeat?", reply_markup=recurrence_keyboard())
+    return STATE_RECURRENCE
+
+
+async def task_recurrence_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    rule = query.data.split(":")[1]
+    recurrence_rule = None if rule == "none" else rule
+
     title = context.user_data.pop("task_title", "")
     priority = context.user_data.pop("task_priority", 2)
+    due_date = context.user_data.pop("task_due", None)
     user_id = update.effective_user.id
+
     try:
-        task_service.add_task(user_id, title, priority=priority, due_date=due_date)
-        logger.info("Task added", extra={"user_id": user_id, "command": "addtask"})
-        await update.message.reply_html(f"Task <b>{title}</b> added!")
+        task_service.add_task(user_id, title, priority=priority, due_date=due_date, recurrence_rule=recurrence_rule)
+        logger.info("Task added", extra={"user_id": user_id, "command": "addtask", "recurrence": recurrence_rule})
+        label = _RECURRENCE_LABELS.get(recurrence_rule, "") if recurrence_rule else ""
+        recur_text = f"\n🔁 Repeats: {label}" if recurrence_rule else ""
+        await query.edit_message_text(f"Task <b>{title}</b> added!{recur_text}", parse_mode="HTML")
     except ValueError as e:
-        await update.message.reply_text(str(e))
+        await query.edit_message_text(str(e))
     return ConversationHandler.END
 
 
@@ -92,10 +110,12 @@ async def listtasks_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("No pending tasks.")
         return
     for task in tasks:
+        recur_text = f"\n   🔁 {_RECURRENCE_LABELS.get(task.recurrence_rule, task.recurrence_rule)}" if task.recurrence_rule else ""
         await update.message.reply_html(
             f"{'🔴' if task.priority==1 else '🟡' if task.priority==2 else '🟢'} "
             f"<b>{task.title}</b> [ID:{task.id}]"
-            + (f"\n   Due: {task.due_date}" if task.due_date else ""),
+            + (f"\n   Due: {task.due_date}" if task.due_date else "")
+            + recur_text,
             reply_markup=task_action_keyboard(task.id),
         )
 
@@ -161,6 +181,7 @@ def get_task_conversation_handler() -> ConversationHandler:
             STATE_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_title_received)],
             STATE_PRIORITY: [CallbackQueryHandler(task_priority_callback, pattern=r"^priority:")],
             STATE_DUE: [MessageHandler(filters.TEXT, task_due_received)],
+            STATE_RECURRENCE: [CallbackQueryHandler(task_recurrence_callback, pattern=r"^recur:")],
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
         per_user=True,

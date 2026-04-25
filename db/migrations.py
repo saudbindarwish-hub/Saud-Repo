@@ -67,4 +67,13 @@ def run_migrations() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_conv_user_time ON conversation_history(user_id, created_at);
         """)
+        # Add recurrence_rule column to existing tables (no-op if already present)
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN recurrence_rule TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE reminders ADD COLUMN recurrence_rule TEXT")
+        except Exception:
+            pass
     conn.close()

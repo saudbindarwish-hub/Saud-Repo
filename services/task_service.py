@@ -3,11 +3,25 @@ from db.repositories import task_repo
 from utils.validators import validate_task_title, validate_task_description, validate_priority, validate_task_id
 
 
-def add_task(user_id: int, title: str, description: str | None = None, priority: int = 2, due_date: str | None = None) -> int:
+def add_task(
+    user_id: int,
+    title: str,
+    description: str | None = None,
+    priority: int = 2,
+    due_date: str | None = None,
+    recurrence_rule: str | None = None,
+) -> int:
     title = validate_task_title(title)
     if description:
         description = validate_task_description(description)
-    task = Task(user_id=user_id, title=title, description=description, priority=priority, due_date=due_date)
+    task = Task(
+        user_id=user_id,
+        title=title,
+        description=description,
+        priority=priority,
+        due_date=due_date,
+        recurrence_rule=recurrence_rule,
+    )
     return task_repo.create_task(task)
 
 
@@ -20,7 +34,18 @@ def list_tasks(user_id: int, priority_filter: int | None = None) -> list[Task]:
 
 def mark_done(user_id: int, task_id_str: str) -> bool:
     task_id = validate_task_id(task_id_str)
-    return task_repo.update_task_status(task_id, user_id, "done")
+    task = task_repo.get_task_by_id(task_id, user_id)
+    ok = task_repo.update_task_status(task_id, user_id, "done")
+    if ok and task and task.recurrence_rule:
+        # Auto-recreate the task for the next recurrence
+        add_task(
+            user_id=user_id,
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            recurrence_rule=task.recurrence_rule,
+        )
+    return ok
 
 
 def delete_task(user_id: int, task_id_str: str) -> bool:

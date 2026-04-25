@@ -11,6 +11,7 @@ class Task(BaseModel):
     priority: int = 2  # 1=High, 2=Medium, 3=Low
     status: str = "pending"
     due_date: Optional[str] = None
+    recurrence_rule: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

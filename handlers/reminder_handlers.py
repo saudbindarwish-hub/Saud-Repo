@@ -10,12 +10,19 @@ from db.repositories import reminder_repo, preference_repo
 from utils.validators import validate_reminder_message
 from utils.formatters import format_reminder_list
 from utils.time_parser import parse_time, format_remind_at, friendly_datetime
-from keyboards.reminder_keyboards import quick_time_keyboard, reminder_cancel_keyboard
+from keyboards.reminder_keyboards import quick_time_keyboard, reminder_cancel_keyboard, recurrence_keyboard
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-STATE_TEXT, STATE_TIME, STATE_CUSTOM = range(3)
+STATE_TEXT, STATE_TIME, STATE_CUSTOM, STATE_RECURRENCE = range(4)
+
+_RECURRENCE_LABELS = {
+    "daily": "Daily",
+    "weekdays": "Weekdays (Mon–Fri)",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+}
 
 
 async def remind_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -58,13 +65,12 @@ async def remind_quick_callback(update: Update, context: ContextTypes.DEFAULT_TY
     elif choice == "tomorrow9am":
         from datetime import date
         tomorrow = date.today().replace(day=date.today().day + 1)
-        import pytz
         remind_at = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 9, 0, tzinfo=timezone.utc)
     else:
         await query.edit_message_text("Unknown time option.")
         return ConversationHandler.END
 
-    return await _save_reminder(update, context, remind_at)
+    return await _ask_recurrence(update, context, remind_at)
 
 
 async def remind_custom_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -74,23 +80,41 @@ async def remind_custom_received(update: Update, context: ContextTypes.DEFAULT_T
     if remind_at is None:
         await update.message.reply_text("Couldn't understand that time. Try 'tomorrow at 9am' or 'in 2 hours'.")
         return STATE_CUSTOM
-    return await _save_reminder(update, context, remind_at)
+    return await _ask_recurrence(update, context, remind_at)
 
 
-async def _save_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE, remind_at: datetime) -> int:
+async def _ask_recurrence(update: Update, context: ContextTypes.DEFAULT_TYPE, remind_at: datetime) -> int:
+    context.user_data["remind_at"] = remind_at
+    text = "How often should this repeat?"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=recurrence_keyboard())
+    else:
+        await update.message.reply_text(text, reply_markup=recurrence_keyboard())
+    return STATE_RECURRENCE
+
+
+async def remind_recurrence_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    rule = query.data.split(":")[1]
+    recurrence_rule = None if rule == "none" else rule
+
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     message = context.user_data.pop("remind_message", "Reminder")
+    remind_at: datetime = context.user_data.pop("remind_at")
     bot = context.bot
-    reminder_service.schedule_reminder(bot, user_id, chat_id, message, remind_at)
+
+    reminder_service.schedule_reminder(bot, user_id, chat_id, message, remind_at, recurrence_rule=recurrence_rule)
+
     prefs = preference_repo.get_or_create_preferences(user_id)
     friendly = friendly_datetime(format_remind_at(remind_at), prefs.timezone)
-    logger.info("Reminder set", extra={"user_id": user_id, "command": "remind"})
-    reply_text = f"⏰ Reminder set for <b>{friendly}</b>:\n{message}"
-    if hasattr(update, "callback_query") and update.callback_query:
-        await update.callback_query.edit_message_text(reply_text, parse_mode="HTML")
-    else:
-        await update.message.reply_html(reply_text)
+    logger.info("Reminder set", extra={"user_id": user_id, "command": "remind", "recurrence": recurrence_rule})
+
+    label = _RECURRENCE_LABELS.get(recurrence_rule, "") if recurrence_rule else ""
+    recur_text = f"\n🔁 Repeats: {label}" if recurrence_rule else ""
+    reply_text = f"⏰ Reminder set for <b>{friendly}</b>:\n{message}{recur_text}"
+    await query.edit_message_text(reply_text, parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -102,8 +126,9 @@ async def listreminders_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("No pending reminders.")
         return
     for r in reminders:
+        recur_text = f"\n🔁 {_RECURRENCE_LABELS.get(r.recurrence_rule, r.recurrence_rule)}" if r.recurrence_rule else ""
         await update.message.reply_html(
-            f"⏰ <b>{r.message}</b>\nWhen: {r.remind_at} UTC [ID:{r.id}]",
+            f"⏰ <b>{r.message}</b>\nWhen: {r.remind_at} UTC{recur_text} [ID:{r.id}]",
             reply_markup=reminder_cancel_keyboard(r.id),
         )
 
@@ -140,6 +165,7 @@ def get_reminder_conversation_handler() -> ConversationHandler:
             STATE_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_text_received)],
             STATE_TIME: [CallbackQueryHandler(remind_quick_callback, pattern=r"^remind_quick:")],
             STATE_CUSTOM: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_custom_received)],
+            STATE_RECURRENCE: [CallbackQueryHandler(remind_recurrence_callback, pattern=r"^recur:")],
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
         per_user=True,

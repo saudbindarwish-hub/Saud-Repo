@@ -7,8 +7,8 @@ def create_task(task: Task) -> int:
     conn = get_connection()
     with conn:
         cur = conn.execute(
-            "INSERT INTO tasks (user_id, title, description, priority, due_date) VALUES (?, ?, ?, ?, ?)",
-            (task.user_id, task.title, task.description, task.priority, task.due_date),
+            "INSERT INTO tasks (user_id, title, description, priority, due_date, recurrence_rule) VALUES (?, ?, ?, ?, ?, ?)",
+            (task.user_id, task.title, task.description, task.priority, task.due_date, task.recurrence_rule),
         )
     task_id = cur.lastrowid
     conn.close()

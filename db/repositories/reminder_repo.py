@@ -7,8 +7,8 @@ def create_reminder(reminder: Reminder) -> int:
     conn = get_connection()
     with conn:
         cur = conn.execute(
-            "INSERT INTO reminders (user_id, chat_id, message, remind_at) VALUES (?, ?, ?, ?)",
-            (reminder.user_id, reminder.chat_id, reminder.message, reminder.remind_at),
+            "INSERT INTO reminders (user_id, chat_id, message, remind_at, recurrence_rule) VALUES (?, ?, ?, ?, ?)",
+            (reminder.user_id, reminder.chat_id, reminder.message, reminder.remind_at, reminder.recurrence_rule),
         )
     reminder_id = cur.lastrowid
     conn.close()

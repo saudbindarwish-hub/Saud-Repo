@@ -1,6 +1,20 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
+def recurrence_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🚫 No repeat", callback_data="recur:none"),
+            InlineKeyboardButton("📅 Daily", callback_data="recur:daily"),
+        ],
+        [
+            InlineKeyboardButton("📆 Weekdays", callback_data="recur:weekdays"),
+            InlineKeyboardButton("🗓 Weekly", callback_data="recur:weekly"),
+        ],
+        [InlineKeyboardButton("🔁 Monthly", callback_data="recur:monthly")],
+    ])
+
+
 def priority_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
