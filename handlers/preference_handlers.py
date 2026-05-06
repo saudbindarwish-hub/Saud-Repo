@@ -1,10 +1,11 @@
 import json
+import zoneinfo
 from telegram import Update
 from telegram.ext import ContextTypes
 from handlers.auth import is_authorized
 from db.repositories import preference_repo
 from services.scheduler_service import scheduler
-from handlers.planning_handlers import send_scheduled_daily_plan
+from handlers.planning_handlers import send_scheduled_daily_plan, send_afternoon_update
 from utils.validators import (
     validate_timezone, validate_plan_time, validate_fitness_goal,
     validate_supplement_name, validate_preferred_name,
@@ -12,6 +13,8 @@ from utils.validators import (
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_UAE_TZ = zoneinfo.ZoneInfo("Asia/Dubai")
 
 
 async def setpreference_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,7 +46,7 @@ async def setpreference_handler(update: Update, context: ContextTypes.DEFAULT_TY
             plan_time = validate_plan_time(args[1])
             preference_repo.update_preference(user_id, "daily_plan_time", plan_time)
             prefs = preference_repo.get_or_create_preferences(user_id)
-            _reschedule_daily_plan(user_id, update.effective_chat.id, plan_time, prefs.timezone)
+            _reschedule_daily_plan(context.bot, user_id, update.effective_chat.id, plan_time, prefs.timezone)
             await update.message.reply_text(f"Daily plan time set to {plan_time}.")
 
         elif field == "name" and len(args) >= 2:
@@ -82,29 +85,56 @@ async def setpreference_handler(update: Update, context: ContextTypes.DEFAULT_TY
     logger.info("Preference updated", extra={"user_id": user_id, "command": "setpreference"})
 
 
-def _reschedule_daily_plan(user_id: int, chat_id: int, plan_time: str, timezone: str) -> None:
+def _reschedule_daily_plan(bot, user_id: int, chat_id: int, plan_time: str, timezone: str) -> None:
     try:
         h, m = int(plan_time[:2]), int(plan_time[3:])
-        import zoneinfo
         try:
             tz = zoneinfo.ZoneInfo(timezone)
         except Exception:
             import pytz
             tz = pytz.timezone(timezone)
-        job_id = f"daily_plan_{user_id}"
         scheduler.add_job(
             send_scheduled_daily_plan,
             "cron",
             hour=h,
             minute=m,
             timezone=tz,
-            id=job_id,
+            id=f"daily_plan_{user_id}",
             replace_existing=True,
-            args=[None, user_id, chat_id],
+            args=[bot, user_id, chat_id],
             misfire_grace_time=300,
         )
     except Exception:
         logger.error("Failed to reschedule daily plan", extra={"user_id": user_id})
+
+
+def schedule_fixed_uae_updates(bot, user_id: int, chat_id: int) -> None:
+    try:
+        scheduler.add_job(
+            send_scheduled_daily_plan,
+            "cron",
+            hour=6,
+            minute=0,
+            timezone=_UAE_TZ,
+            id=f"morning_plan_{user_id}",
+            replace_existing=True,
+            args=[bot, user_id, chat_id],
+            misfire_grace_time=300,
+        )
+        scheduler.add_job(
+            send_afternoon_update,
+            "cron",
+            hour=15,
+            minute=0,
+            timezone=_UAE_TZ,
+            id=f"afternoon_update_{user_id}",
+            replace_existing=True,
+            args=[bot, user_id, chat_id],
+            misfire_grace_time=300,
+        )
+        logger.info("Fixed UAE update jobs scheduled", extra={"user_id": user_id})
+    except Exception:
+        logger.error("Failed to schedule fixed UAE updates", extra={"user_id": user_id})
 
 
 async def mypreferences_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

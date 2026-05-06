@@ -27,7 +27,7 @@ from handlers.whoop_handlers import (
     get_recovery_conversation, get_sleep_conversation,
     get_strain_conversation, whoopstats_handler,
 )
-from handlers.preference_handlers import setpreference_handler, mypreferences_handler
+from handlers.preference_handlers import setpreference_handler, mypreferences_handler, schedule_fixed_uae_updates
 from handlers.ai_handlers import ai_message_handler
 
 logger = get_logger(__name__)
@@ -84,6 +84,10 @@ def main() -> None:
 
     # Global error handler
     app.add_error_handler(error_handler)
+
+    # Schedule fixed 6 AM and 3 PM UAE updates for all allowed users
+    for user_id in settings.allowed_user_ids:
+        schedule_fixed_uae_updates(app.bot, user_id, user_id)
 
     logger.info("Bot starting — polling mode")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
