@@ -59,7 +59,7 @@ async def send_scheduled_daily_plan(bot, user_id: int, chat_id: int) -> None:
             f"Gold spot: ${g['usd_oz']:,.2f}/oz (AED {g['aed_oz']:,.2f}), "
             f"${g['usd_gram']:,.2f}/gram (AED {g['aed_gram']:,.2f})\n"
             f"Silver spot: ${s['usd_oz']:,.2f}/oz (AED {s['aed_oz']:,.2f}), "
-            f"${s['usd_gram']:,.2f}/gram (AED {s['aed_gram']:,.2f})\n\n"
+            f"${s['usd_kg']:,.2f}/kg (AED {s['aed_kg']:,.2f})\n\n"
             "Give your brief recommendation."
         )
         try:

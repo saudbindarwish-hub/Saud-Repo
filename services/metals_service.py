@@ -5,6 +5,7 @@ logger = get_logger(__name__)
 
 _USD_TO_AED = 3.6725  # Fixed UAE peg
 _TROY_OZ_TO_GRAM = 31.1035
+_TROY_OZ_TO_KG = _TROY_OZ_TO_GRAM / 1000
 
 # metals.live — free, no API key, returns spot prices in USD per troy oz
 _METALS_URL = "https://metals.live/api/v1/spot"
@@ -41,7 +42,7 @@ async def fetch_metals_prices() -> dict | None:
             logger.warning("Metals API returned unexpected format", extra={"raw_keys": list(raw.keys())})
             return None
 
-        def _convert(usd_oz: float) -> dict:
+        def _convert_gold(usd_oz: float) -> dict:
             return {
                 "usd_oz":   round(usd_oz, 2),
                 "usd_gram": round(usd_oz / _TROY_OZ_TO_GRAM, 2),
@@ -49,8 +50,16 @@ async def fetch_metals_prices() -> dict | None:
                 "aed_gram": round((usd_oz / _TROY_OZ_TO_GRAM) * _USD_TO_AED, 2),
             }
 
+        def _convert_silver(usd_oz: float) -> dict:
+            return {
+                "usd_oz":  round(usd_oz, 2),
+                "usd_kg":  round(usd_oz / _TROY_OZ_TO_KG, 2),
+                "aed_oz":  round(usd_oz * _USD_TO_AED, 2),
+                "aed_kg":  round((usd_oz / _TROY_OZ_TO_KG) * _USD_TO_AED, 2),
+            }
+
         logger.info("Metals prices fetched")
-        return {"gold": _convert(gold_usd_oz), "silver": _convert(silver_usd_oz)}
+        return {"gold": _convert_gold(gold_usd_oz), "silver": _convert_silver(silver_usd_oz)}
 
     except Exception as exc:
         logger.error("Failed to fetch metals prices", extra={"error": str(exc)})
@@ -68,8 +77,8 @@ def format_metals_section(prices: dict) -> str:
         f"  Per gram: ${g['usd_gram']:,.2f}  |  AED {g['aed_gram']:,.2f}\n"
         "\n"
         "🥈 <b>Silver</b>\n"
-        f"  Per oz:   ${s['usd_oz']:,.2f}  |  AED {s['aed_oz']:,.2f}\n"
-        f"  Per gram: ${s['usd_gram']:,.2f}  |  AED {s['aed_gram']:,.2f}\n"
+        f"  Per oz: ${s['usd_oz']:,.2f}  |  AED {s['aed_oz']:,.2f}\n"
+        f"  Per kg: ${s['usd_kg']:,.2f}  |  AED {s['aed_kg']:,.2f}\n"
         "\n"
         f"<i>USD/AED rate: {_USD_TO_AED} (fixed peg)</i>"
     )
